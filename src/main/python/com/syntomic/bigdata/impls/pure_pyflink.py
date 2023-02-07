@@ -1,4 +1,6 @@
 from pyflink.common import Row, Types
+from pyflink.table.types import DataTypes
+from pyflink.table import Table
 from pyflink.datastream import RuntimeContext, ProcessFunction
 
 from src.main.python.com.syntomic.bigdata.abstract_job import AbstractJob
@@ -11,7 +13,7 @@ class PurePyFlink(AbstractJob):
         self.create_tables()
 
         source = self.tableEnv.to_data_stream(self.tableEnv.from_path("source"))
-        transform = source.process(MyProcessFunction(), Types.ROW([Types.INT()]))
+        transform = source.process(MyProcessFunction(), self.datatype_to_typeinfo(self.tableEnv.from_path("sink")))
         self.tableEnv.from_data_stream(transform).execute_insert("sink").wait()
 
     def create_tables(self):
@@ -50,6 +52,31 @@ class PurePyFlink(AbstractJob):
             FROM
                 `origin`
         """)
+
+    def datatype_to_typeinfo(self, table: Table):
+        row_data_type = table.get_schema().to_row_data_type()
+        row_type_info = []
+        for field_type in row_data_type.field_types():
+            if field_type == DataTypes.INT():
+                row_type_info.append(Types.INT())
+            elif field_type == DataTypes.STRING():
+                row_type_info.append(Types.STRING())
+            elif field_type == DataTypes.FLOAT():
+                row_type_info.append(Types.FLOAT())
+            elif field_type == DataTypes.DOUBLE():
+                row_type_info.append(Types.DOUBLE())
+            elif field_type == DataTypes.MAP(DataTypes.STRING(), DataTypes.STRING()):
+                row_type_info.append(Types.MAP(Types.STRING(), Types.STRING()))
+            elif field_type == DataTypes.ARRAY(DataTypes.STRING):
+                # ! 待验证
+                row_type_info.append(Types.BASIC_ARRAY(Types.STRING()))
+            elif field_type == DataTypes.TIMESTAMP_LTZ():
+                row_type_info.append(Types.SQL_TIMESTAMP())
+            else:
+                raise ValueError(f"cannot convert {field_type} to typeinfo")
+
+        return Types.ROW_NAMED(row_data_type.field_names(), row_type_info)
+
 
 
 
